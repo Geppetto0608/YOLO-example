@@ -1,0 +1,156 @@
+from IPython.display import display, Javascript, Image
+from google.colab.output import eval_js
+from base64 import b64decode, b64encode
+import cv2
+import numpy as np
+import PIL
+import io
+import html
+import time
+from ultralytics import YOLO
+
+# 모델 로드
+model = YOLO('/content/yolo12n.pt')
+
+def video_stream():
+  js = Javascript('''
+    var video;
+    var div = null;
+    var stream;
+    var captureCanvas;
+    var imgElement;
+    var labelElement;
+    
+    var pendingResolve = null;
+    var shutdown = false;
+    
+    function removeDom() {
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      if (video) video.remove();
+      if (div) div.remove();
+      video = null;
+      div = null;
+      stream = null;
+      imgElement = null;
+      captureCanvas = null;
+      labelElement = null;
+    }
+    
+    function onAnimationFrame() {
+      if (!shutdown) {
+        window.requestAnimationFrame(onAnimationFrame);
+      }
+      if (pendingResolve) {
+        var result = "";
+        if (!shutdown && video && video.readyState === 4) {
+          captureCanvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
+          result = captureCanvas.toDataURL('image/jpeg', 0.8);
+        }
+        var lp = pendingResolve;
+        pendingResolve = null;
+        lp(result);
+      }
+    }
+    
+    async function createDom() {
+      if (div !== null) return;
+
+      div = document.createElement('div');
+      div.id = 'yolo-container';
+      div.style.border = '2px solid black';
+      div.style.padding = '10px';
+      div.style.width = '1320px'; // 가로로 두 개 배치하기 위해 너비 확장
+      
+      const title = document.createElement('div');
+      title.innerHTML = "<b>YOLOv12 Real-time Detection (Left: Original, Right: Detection)</b>";
+      div.appendChild(title);
+
+      labelElement = document.createElement('div');
+      labelElement.style.color = 'blue';
+      div.appendChild(labelElement);
+
+      // 영상을 나란히 놓기 위한 컨테이너
+      const flexDiv = document.createElement('div');
+      flexDiv.style.display = 'flex';
+      flexDiv.style.gap = '10px';
+      div.appendChild(flexDiv);
+
+      video = document.createElement('video');
+      video.width = 640;
+      video.height = 480;
+      video.autoplay = true;
+      flexDiv.appendChild(video);
+
+      imgElement = document.createElement('img');
+      imgElement.width = 640;
+      imgElement.height = 480;
+      flexDiv.appendChild(imgElement);
+
+      const stopBtn = document.createElement('button');
+      stopBtn.textContent = '중지';
+      div.appendChild(stopBtn);
+      stopBtn.onclick = () => { shutdown = true; };
+
+      stream = await navigator.mediaDevices.getUserMedia({video: {facemode: "user"}});
+      video.srcObject = stream;
+      await video.play();
+
+      captureCanvas = document.createElement('canvas');
+      captureCanvas.width = 640;
+      captureCanvas.height = 480;
+
+      window.requestAnimationFrame(onAnimationFrame);
+      
+      document.body.appendChild(div);
+      google.colab.output.setIframeHeight(document.body.scrollHeight, true);
+    }
+
+    async function stream_frame(label, imgData) {
+      if (shutdown) {
+        removeDom();
+        shutdown = false;
+        return "shutdown";
+      }
+
+      await createDom();
+
+      if (label !== "") {
+        labelElement.innerHTML = label;
+      }
+            
+      if (imgData !== "") {
+        imgElement.src = imgData;
+      }
+
+      return new Promise((resolve) => { pendingResolve = resolve; });
+    }
+    ''')
+  display(js)
+
+def video_frame(label, bbox_img):
+  data = eval_js('stream_frame("{}", "{}")'.format(label, bbox_img))
+  return data
+
+# 메인 루프 실행
+video_stream()
+label_html = '객체 감지 중...'
+bbox = ''
+
+while True:
+    js_reply = video_frame(label_html, bbox)
+    if js_reply == 'shutdown':
+        break
+
+    try:
+        img_bytes = b64decode(js_reply.split(',')[1])
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        results = model.predict(img, conf=0.3, verbose=False)
+        annotated_frame = results[0].plot()
+        
+        _, buffer = cv2.imencode('.jpg', annotated_frame)
+        bbox_bytes = b64encode(buffer)
+        bbox = f"data:image/jpeg;base64,{bbox_bytes.decode('utf-8')}"
+    except Exception as e:
+        continue
