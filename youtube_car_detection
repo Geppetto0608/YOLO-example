@@ -1,0 +1,35 @@
+# 1. 유튜브 스트리밍을 위한 라이브러리 설치
+!pip install -q yt-dlp
+
+from ultralytics import YOLO
+import cv2
+
+# 2. 직접 생성한 pt 파일 경로 설정
+# 예: '/content/runs/exp/weights/best.pt' 또는 '/content/runs/kitti_yolo12n/weights/best.pt'
+model_path = '/content/runs/exp/weights/best.pt'
+model = YOLO(model_path)
+
+# 3. 유튜브 링크 설정
+youtube_url = 'https://www.youtube.com/watch?v=MNn9qKG2UFI' # 분석하고 싶은 링크로 변경하세요
+
+# 4. 실시간 Detection 실행
+# stream=True를 사용하여 메모리 점유를 줄이고 실시간 처리를 수행합니다.
+results = model.predict(
+    source=youtube_url,
+    conf=0.25,      # 탐지 임계값
+    save=True,      # 결과를 동영상 파일로 저장
+    show=False,     # 코랩 로컬창 출력은 지원되지 않으므로 False
+    stream=True,    # 스트리밍 모드 활성화
+    project='/content/youtube_results',
+    name='detection_test',
+    exist_ok=True
+)
+
+print("유튜브 영상 분석을 시작합니다... (결과는 /content/youtube_results 에 저장됩니다)")
+for i, r in enumerate(results):
+    if i % 30 == 0:
+        print(f"{i} 프레임 처리 중...")
+    if i > 300:
+        break
+
+print("분석이 완료되었습니다.")
