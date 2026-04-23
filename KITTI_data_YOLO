@@ -1,0 +1,174 @@
+//cell 1
+
+###KITTI Label transforms to YOLO format
+
+
+import os
+from PIL import Image
+
+label_input = '/content/kitti_raw/training/label_2'
+image_input = '/content/kitti_raw/training/image_2'
+label_output = '/content/kitti_raw/labels_raw'
+
+os.makedirs(label_output, exist_ok=True)
+
+class_map = {
+    'Car': 0,
+    'Truck': 1,
+    'Van': 2
+}
+
+for file in os.listdir(label_input):
+    if not file.endswith('.txt'):
+        continue
+
+    image_path = os.path.join(image_input, file.replace('.txt', '.png'))
+    label_path = os.path.join(label_input, file)
+    output_path = os.path.join(label_output, file)
+
+    if not os.path.exists(image_path):
+        continue
+
+    W, H = Image.open(image_path).size
+    lines = open(label_path, 'r').readlines()
+    yolo_lines = []
+
+    for line in lines:
+        parts = line.strip().split()
+        cls = parts[0]
+
+        if cls not in class_map:
+            continue
+
+        cls_id = class_map[cls]
+        x1, y1, x2, y2 = map(float, parts[4:8])
+
+        xc = ((x1 + x2) / 2) / W
+        yc = ((y1 + y2) / 2) / H
+        w = (x2 - x1) / W
+        h = (y2 - y1) / H
+
+        yolo_lines.append(f"{cls_id} {xc:.6f} {yc:.6f} {w:.6f} {h:.6f}\n")
+
+    with open(output_path, 'w') as f:
+        f.writelines(yolo_lines)
+
+print("YOLO 포맷 변환 완료")
+
+
+
+
+//cell 2
+##전체 데이터 --> 학습용(train)/검증용(val)나눔.
+
+
+
+import os
+import shutil
+from sklearn.model_selection import train_test_split
+
+image_dir = '/content/kitti_raw/training/image_2'
+label_dir = '/content/kitti_raw/labels_raw'
+
+images = sorted([f for f in os.listdir(image_dir) if f.endswith('.png')])
+available_imgs = [
+    f for f in images
+    if os.path.exists(os.path.join(label_dir, f.replace('.png', '.txt')))
+]
+
+train_imgs, val_imgs = train_test_split(
+    available_imgs, test_size=0.2, random_state=42
+)
+
+for split in ['train', 'val']:
+    os.makedirs(f'/content/kitti_raw/images/{split}', exist_ok=True)
+    os.makedirs(f'/content/kitti_raw/labels/{split}', exist_ok=True)
+
+def copy_split(image_list, split):
+    for img in image_list:
+        img_id = os.path.splitext(img)[0]
+
+        src_img = os.path.join(image_dir, img)
+        src_lbl = os.path.join(label_dir, f'{img_id}.txt')
+
+        dst_img = f'/content/kitti_raw/images/{split}/{img}'
+        dst_lbl = f'/content/kitti_raw/labels/{split}/{img_id}.txt'
+
+        shutil.copy(src_img, dst_img)
+        shutil.copy(src_lbl, dst_lbl)
+
+copy_split(train_imgs, 'train')
+copy_split(val_imgs, 'val')
+
+print(f'train: {len(train_imgs)}')
+print(f'val: {len(val_imgs)}')
+print('복사 완료')
+
+//cell3
+
+##데이터 어디있는지/클래스 몇개인지/ 클래스 이름이 뭔지 설정.
+
+
+data_yaml = """
+path: /content/kitti_raw
+train: images/train
+val: images/val
+
+nc: 3
+names: ['Car', 'Truck', 'Van']
+"""
+
+with open('/content/kitti_data.yaml', 'w') as f:
+    f.write(data_yaml)
+
+print(data_yaml)
+
+//cell 4
+##학습 알고리즘
+
+from ultralytics import YOLO
+
+model = YOLO('yolo12n.pt')
+
+model.train(
+    data='/content/kitti_data.yaml',
+    epochs=50,
+    imgsz=640,
+    batch=16,
+    workers=4,
+    project='/content/runs',
+    name='kitti_yolo12n'
+)
+
+//cell 5
+
+##이미지 검증
+
+import glob, random
+from ultralytics import YOLO
+
+val_imgs = glob.glob('/content/kitti_raw/images/val/*.png')
+test_img = random.choice(val_imgs)
+
+model = YOLO('/content/runs/kitti_yolo12n/weights/best.pt')
+results = model(test_img)
+
+results[0].show()
+results[0].save(filename='/content/kitti_prediction.jpg')
+
+//cell 6
+#이미지 테스트
+
+from ultralytics import YOLO
+
+model = YOLO('/content/runs/kitti_yolo12n/weights/best.pt')
+
+model.predict(
+    source='/content/my_images',
+    conf=0.25,
+    classes=[0,1,2],   # Car,Truck,ban
+    save=True,
+    project='/content',
+    name='my_images_detected',
+    exist_ok=True
+)
