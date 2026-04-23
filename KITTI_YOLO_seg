@@ -1,0 +1,17 @@
+from ultralytics import YOLO
+import os
+
+# YOLOv11 segmentation 모델 로드 (nano 버전)
+model_v11 = YOLO('yolo11n-seg.pt')
+
+# 예측 수행
+results = model_v11.predict(
+    source='/content/my_images',
+    conf=0.25,
+    save=True,
+    project='/content',
+    name='my_images_v11_segmented',
+    exist_ok=True
+)
+
+print("YOLOv11 세그멘테이션 완료. 결과 저장 위치: /content/my_images_v11_segmented")
