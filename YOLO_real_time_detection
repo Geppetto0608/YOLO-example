@@ -1,3 +1,10 @@
+//cell1
+
+!pip install -q ultralytics opencv-python pillow
+
+//cell2
+
+
 from IPython.display import display, Javascript, Image
 from google.colab.output import eval_js
 from base64 import b64decode, b64encode
