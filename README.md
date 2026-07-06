@@ -189,7 +189,7 @@ OPENAI_API_KEY = userdata.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KE
 
 ## 라이센스
 
-MIT License - 자유롭게 사용, 수정, 배포할 수 있습니다.
+MIT License - 자유롭게 사용, 수정, 배포할 수 있으니나, 상업적 이용을 금합니다.
 
 ## 참고
 
