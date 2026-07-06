@@ -6,6 +6,23 @@ Google Colab 환경에서 YOLO 객체 탐지 모델을 학습하고 실제로 �
 
 이 프로젝트는 KITTI 데이터셋을 활용하여 자동차, 트럭, 밴을 탐지하는 YOLOv12 모델을 학습하고, 실시간 영상 분석, Vision Language Model(VLM) 통합 등 다양한 응용 방식을 다룹니다.
 
+## Repository Status
+
+This is a computer-vision learning/example repository, not a benchmark repository.
+
+Current evidence:
+
+- Colab-style scripts for KITTI conversion/training, webcam inference, segmentation, VLM analysis, and YouTube inference are included.
+- Sample images and reference PDFs are included.
+- Trained weights, mAP metrics, FPS benchmarks, and curated demo videos are not included.
+
+Missing portfolio evidence:
+
+- Training metrics: TBD
+- mAP / precision / recall table: TBD
+- Example annotated output image or GIF: TBD
+- Reproducible Colab notebook links: TBD
+
 ## 주요 파일 설명
 
 ### 1. KITTI_data_YOLO
@@ -66,7 +83,7 @@ Google Colab에서 웹캠 접근을 활용한 실시간 탐지입니다:
 
 웹캠 영상을 GPT-4에 전달하여 자연어로 분석합니다:
 
-- **설정:** OpenAI API 키 입력 필요 (코드에서 설정)
+- **설정:** `OPENAI_API_KEY`를 Colab Secrets 또는 환경 변수로 설정
 - **분석 모드:**
   - `caption`: 장면 전체를 한 문장으로 설명
   - `objects`: 보이는 주요 물체 5개 이하로 나열
@@ -125,6 +142,19 @@ YOLO-example/
 
 ```bash
 pip install ultralytics opencv-python pillow yt-dlp openai scikit-learn
+```
+
+## Secret Handling
+
+Do not hard-code API keys in this repository.
+
+For Colab VLM examples, store the key as a Colab Secret named `OPENAI_API_KEY`, or set an environment variable before running the script.
+
+```python
+import os
+from google.colab import userdata
+
+OPENAI_API_KEY = userdata.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
 ```
 
 ## 사용 방법

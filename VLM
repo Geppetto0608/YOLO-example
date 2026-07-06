@@ -18,9 +18,17 @@ from openai import OpenAI
 
 # =========================================
 # 2. OpenAI API 설정
-#    아래 빈칸에 본인 키를 넣으세요.
+#    Colab Secrets 또는 환경 변수에 OPENAI_API_KEY를 등록하세요.
 # =========================================
-OPENAI_API_KEY = "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"
+try:
+    from google.colab import userdata
+    OPENAI_API_KEY = userdata.get("OPENAI_API_KEY")
+except Exception:
+    OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY is required. Set it in Colab Secrets or as an environment variable.")
+
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # =========================================
