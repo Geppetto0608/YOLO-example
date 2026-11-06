@@ -1,0 +1,108 @@
+#== 셀 1: 설치
+!pip install -q openai
+
+
+#==== 셀 2: 설정 + 함수 정의
+import json, base64
+import pandas as pd
+import matplotlib.pyplot as plt
+from PIL import Image
+from io import BytesIO
+from IPython.display import display, Javascript
+from google.colab.output import eval_js
+from openai import OpenAI
+
+OPENAI_API_KEY = 'api-key'   # 다른 곳에 공유하시면 안되요.!
+VLM_MODEL = 'gpt-4o-mini'              # 비전 지원 모델. 계정에서 쓸 수 있는 최신 모델로 바꿔도 됨
+DETAIL = 'auto'                        # 'low'는 싸고 빠름, 'high'는 작은 과일까지 자세히 봄
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+FRUIT_PROMPT = (
+    '사진에 보이는 과일을 모두 찾아 각각의 신선도를 판단하고 JSON으로만 답하세요. '
+    '형식: {"fruits": [{"name": "과일 이름(한국어)", "position": "화면에서의 위치(예: 왼쪽 위)", '
+    '"status": "fresh 또는 rotten 또는 unsure", "reason": "판단 근거 한 문장"}], '
+    '"summary": "전체 상황 한두 문장 요약"} '
+    '과일이 없으면 fruits를 빈 목록으로 하세요.'
+)
+
+
+def take_photo(filename='photo.jpg', quality=0.8):
+    """브라우저 카메라를 켜고 '찍기' 버튼을 누르면 사진을 저장하고 data URL을 돌려줌"""
+    js = Javascript('''
+    async function takePhoto(quality) {
+      const div = document.createElement('div');
+      const btn = document.createElement('button');
+      btn.textContent = '📸 찍기';
+      btn.style.fontSize = '18px';
+      div.appendChild(btn);
+      const video = document.createElement('video');
+      video.style.display = 'block';
+      video.style.maxWidth = '640px';
+      const stream = await navigator.mediaDevices.getUserMedia({video: true});
+      document.body.appendChild(div);
+      div.appendChild(video);
+      video.srcObject = stream;
+      await video.play();
+      google.colab.output.setIframeHeight(document.documentElement.scrollHeight, true);
+      await new Promise((resolve) => btn.onclick = resolve);
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0);
+      stream.getVideoTracks()[0].stop();
+      div.remove();
+      return canvas.toDataURL('image/jpeg', quality);
+    }
+    ''')
+    display(js)
+    data_url = eval_js(f'takePhoto({quality})')
+    with open(filename, 'wb') as f:
+        f.write(base64.b64decode(data_url.split(',')[1]))
+    return data_url
+
+
+def ask_vlm(data_url, prompt, as_json=True):
+    """사진(data URL)과 질문을 VLM에 보내고 답을 받음"""
+    kwargs = {'response_format': {'type': 'json_object'}} if as_json else {}
+    resp = client.chat.completions.create(
+        model=VLM_MODEL,
+        messages=[{'role': 'user', 'content': [
+            {'type': 'text', 'text': prompt},
+            {'type': 'image_url', 'image_url': {'url': data_url, 'detail': DETAIL}},
+        ]}],
+        **kwargs,
+    )
+    text = resp.choices[0].message.content
+    return json.loads(text) if as_json else text
+
+
+def show_photo(data_url):
+    img = Image.open(BytesIO(base64.b64decode(data_url.split(',')[1])))
+    plt.figure(figsize=(8, 6))
+    plt.imshow(img)
+    plt.axis('off')
+    plt.show()
+
+
+# ===== 셀 3: 찍어서 과일 신선도 판단 (다시 하려면 이 셀만 다시 실행)
+photo = take_photo()          # 카메라 권한 허용 → 과일을 비추고 '찍기' 클릭
+show_photo(photo)
+try:
+    result = ask_vlm(photo, FRUIT_PROMPT)
+    print('요약:', result.get('summary', ''))
+    fruits = result.get('fruits', [])
+    if fruits:
+        display(pd.DataFrame(fruits))
+    else:
+        print('과일을 찾지 못했습니다.')
+except Exception as e:
+    print('VLM 호출 오류:', e)
+
+
+# ===== 셀 4 (선택): 같은 사진에 자유롭게 질문
+QUESTION = '이 과일들로 만들 수 있는 간단한 간식을 추천해 줘.'
+try:
+    print(ask_vlm(photo, QUESTION, as_json=False))
+except Exception as e:
+    print('VLM 호출 오류:', e)
