@@ -1,0 +1,77 @@
+# 셀 1
+
+
+
+import os
+from google.colab import drive
+drive.mount('/content/drive')
+ 
+VIDEO_IN   = '영상 경로'        # 입력 영상 
+MODEL_PATH = 'best.pt 경로'       # 학습된 과일 모델
+OUT_RAW    = '/content/result_raw.mp4'                 # 임시 결과 (OpenCV 저장용)
+OUT_FINAL  = '/content/drive/MyDrive/fruit_result.mp4' # 최종 결과 (Drive에 저장)
+CONF = 0.5                                             # 이 점수 이상 박스만 표시
+ 
+for name, p in [('영상', VIDEO_IN), ('모델', MODEL_PATH)]:
+    print(f'{name}: {"OK" if os.path.exists(p) else "없음! 경로 확인"}  {p}')
+ 
+ 
+# 셀 2 (선택): best.pt를 Drive에 백업
+# 런타임이 끊기면 /content 파일은 사라지므로 학습 직후 한 번 실행 권장
+!cp {MODEL_PATH} /content/drive/MyDrive/fruit_best.pt
+# 다음 시간에는 MODEL_PATH = '/content/drive/MyDrive/fruit_best.pt' 로 바로 사용
+ 
+ 
+#  셀 3: 프레임 단위 detection
+import cv2
+from ultralytics import YOLO
+from google.colab.patches import cv2_imshow
+ 
+model = YOLO(MODEL_PATH)
+print('클래스:', model.names)
+ 
+cap = cv2.VideoCapture(VIDEO_IN)
+fps   = cap.get(cv2.CAP_PROP_FPS) or 30
+w     = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+h     = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+print(f'{w}x{h}, {fps:.1f}fps, {total}프레임 (약 {total / fps:.0f}초)')
+ 
+writer = cv2.VideoWriter(OUT_RAW, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
+ 
+i = 0
+while True:
+    ok, frame = cap.read()                 # 1) 프레임 한 장 읽기
+    if not ok:                             #    더 없으면 영상 끝
+        break
+ 
+    result = model(frame, conf=CONF, verbose=False)[0]   # 2) 한 장 detection
+    annotated = result.plot()                            # 3) 박스·클래스·점수 그리기
+ 
+    # 4) 왼쪽 위에 과일별 개수 표시
+    cls_ids = result.boxes.cls.int().tolist()
+    counts = {result.names[c]: cls_ids.count(c) for c in set(cls_ids)}
+    text = '  '.join(f'{k}: {v}' for k, v in counts.items())
+    cv2.putText(annotated, text, (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+ 
+    writer.write(annotated)                # 5) 결과 영상에 추가
+ 
+    if i == 0:                             # 첫 프레임은 바로 확인용으로 출력
+        cv2_imshow(annotated)
+    i += 1
+    if i % 100 == 0:
+        print(f'{i}/{total} 프레임 처리')
+ 
+cap.release()
+writer.release()
+print('detection 완료:', i, '프레임')
+ 
+ 
+# ===== 셀 4: 브라우저 재생용 H.264 변환 (Drive에 저장) =====
+!ffmpeg -y -loglevel error -i {OUT_RAW} -vcodec libx264 -pix_fmt yuv420p "{OUT_FINAL}"
+print('저장:', OUT_FINAL)
+ 
+ 
+# 셀 5: Colab 안에서 재생
+from IPython.display import Video
+Video(OUT_FINAL, embed=True, width=800)
