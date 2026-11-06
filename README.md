@@ -196,3 +196,6 @@ MIT License - 자유롭게 사용, 수정, 배포할 수 있으니나, 상업적
 - **YOLO 공식:** https://github.com/ultralytics/ultralytics
 - **KITTI 데이터셋:** http://www.cvlibs.net/datasets/kitti/
 - **Google Colab:** https://colab.research.google.com/
+
+
+- fruit dataset: https://universe.roboflow.com/orkhan-aliyev-8nktf/fruits-and-vegetables-2vf7u/dataset/1
